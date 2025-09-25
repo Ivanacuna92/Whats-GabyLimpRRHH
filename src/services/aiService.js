@@ -1,6 +1,11 @@
 const axios = require('axios');
 const config = require('../config/config');
-const csvService = require('./csvService');
+const vacancyService = require('./vacancyService').default;
+
+// Limpiar caché al inicializar
+if (vacancyService.initialize) {
+    vacancyService.initialize();
+}
 
 class AIService {
     constructor() {
@@ -10,9 +15,9 @@ class AIService {
 
     async generateResponse(messages) {
         try {
-            // Incluir datos de CSV en el prompt del sistema
-            const enrichedMessages = await this.addCSVDataToSystemPrompt(messages);
-            
+            // Incluir datos enriquecidos en el prompt del sistema
+            const enrichedMessages = await this.addEnrichedDataToSystemPrompt(messages);
+
             const response = await axios.post(this.apiUrl, {
                 model: 'deepseek-chat',
                 messages: enrichedMessages,
@@ -28,42 +33,54 @@ class AIService {
             return response.data.choices[0].message.content;
         } catch (error) {
             console.error('Error con DeepSeek API:', error.response?.data || error.message);
-            
+
             if (error.response?.data?.error?.type === 'authentication_error') {
                 throw new Error('Error de autenticación con API key');
             }
-            
+
             throw new Error('Error generando respuesta de IA');
         }
     }
 
-    async addCSVDataToSystemPrompt(messages) {
+    async addEnrichedDataToSystemPrompt(messages) {
         try {
-            // Obtener todos los datos de CSV
-            const allRecords = await csvService.getAllRecords();
-            
-            if (allRecords.length === 0) {
-                return messages;
-            }
-            
-            // Formatear todos los registros
-            const csvData = allRecords.map(record => 
-                csvService.formatRecordForDisplay(record)
-            ).join('\n\n---\n\n');
-            
-            // Agregar CSV data al mensaje del sistema
+            // Clonar mensajes
             const enrichedMessages = [...messages];
             const systemMessage = enrichedMessages.find(m => m.role === 'system');
-            
-            if (systemMessage) {
-                systemMessage.content = systemMessage.content + `\n\n*BASE DE DATOS DE NAVES DISPONIBLES:*\n\n${csvData}\n\nUsa esta información cuando el usuario pregunte sobre naves, parques industriales, precios, disponibilidad o cualquier tema relacionado. Si el usuario pregunta por algo específico que está en esta base de datos, úsala para responder de manera precisa y actualizada.`;
+
+            if (!systemMessage) {
+                return messages;
             }
-            
+
+            // SIEMPRE agregar información actualizada de vacantes al contexto
+            // según las instrucciones del prompt (líneas 125-137)
+            const vacancies = await vacancyService.getVacancies();
+            const vacancyData = vacancyService.formatVacanciesForAI(vacancies);
+
+            console.log('💼 Vacantes obtenidas para AI:', vacancies.length);
+
+            systemMessage.content = systemMessage.content + `\n\n[INFORMACIÓN ACTUALIZADA DE VACANTES]\n${vacancyData}\n\nIMPORTANTE: Usa ÚNICAMENTE la información de vacantes proporcionada arriba. NO inventes puestos, salarios o requisitos. Si no hay vacantes disponibles o si la información solicitada no está en los datos proporcionados, indícalo claramente al candidato.`;
+
+            console.log('💼 Información de vacantes agregada al contexto');
+
             return enrichedMessages;
         } catch (error) {
-            console.error('Error agregando datos CSV al prompt:', error);
+            console.error('Error agregando datos enriquecidos al prompt:', error);
             return messages;
         }
+    }
+
+    detectVacancyIntent(message) {
+        const vacancyKeywords = [
+            'vacante', 'trabajo', 'empleo', 'puesto', 'contratar', 'contratación',
+            'trabajar', 'empleos', 'oportunidad', 'oportunidades', 'busco trabajo',
+            'necesito trabajo', 'hay trabajo', 'están contratando', 'requisitos',
+            'salario', 'sueldo', 'horario', 'turno', 'disponible', 'disponibles',
+            'plaza', 'plazas', 'personal', 'reclutamiento', 'cv', 'currículum'
+        ];
+
+        const lowerMessage = message.toLowerCase();
+        return vacancyKeywords.some(keyword => lowerMessage.includes(keyword));
     }
 }
 

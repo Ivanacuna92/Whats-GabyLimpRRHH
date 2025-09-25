@@ -2,17 +2,13 @@ const express = require("express");
 const cors = require("cors");
 const path = require("path");
 const cookieParser = require("cookie-parser");
-const multer = require("multer");
 const logger = require("../services/logger");
 const humanModeManager = require("../services/humanModeManager");
 const salesManager = require("../services/salesManager");
 const conversationAnalyzer = require("../services/conversationAnalyzer");
 const authService = require("../services/authService");
-const csvService = require("../services/csvService");
 const {
-  requireAuth,
-  requireAdmin,
-  requireSupportOrAdmin,
+  requireAuth
 } = require("../middleware/auth");
 const ViteExpress = require("vite-express");
 
@@ -837,109 +833,6 @@ class WebServer {
       }
     });
 
-    // ===== ENDPOINTS DE GESTIÓN DE CSV (SOLO ADMIN) =====
-
-    // Configurar multer para subida de archivos
-    const upload = multer({
-      limits: { fileSize: 10 * 1024 * 1024 }, // Límite de 10MB
-      fileFilter: (req, file, cb) => {
-        if (
-          file.mimetype === "text/csv" ||
-          file.originalname.endsWith(".csv")
-        ) {
-          cb(null, true);
-        } else {
-          cb(new Error("Solo se permiten archivos CSV"));
-        }
-      },
-    });
-
-    // Subir archivo CSV
-    this.app.post(
-      "/api/csv/upload",
-      requireAdmin,
-      upload.single("csv"),
-      async (req, res) => {
-        try {
-          if (!req.file) {
-            return res
-              .status(400)
-              .json({ error: "No se proporcionó archivo CSV" });
-          }
-
-          const result = await csvService.saveCSV(
-            req.file.originalname,
-            req.file.buffer.toString("utf8")
-          );
-
-          res.json(result);
-        } catch (error) {
-          console.error("Error subiendo CSV:", error);
-          res.status(500).json({ error: error.message });
-        }
-      }
-    );
-
-    // Listar archivos CSV subidos
-    this.app.get("/api/csv/list", requireAdmin, async (req, res) => {
-      try {
-        const files = await csvService.listCSVFiles();
-        res.json({ files });
-      } catch (error) {
-        console.error("Error listando CSVs:", error);
-        res.status(500).json({ error: "Error obteniendo lista de archivos" });
-      }
-    });
-
-    // Eliminar archivo CSV
-    this.app.delete(
-      "/api/csv/delete/:filename",
-      requireAdmin,
-      async (req, res) => {
-        try {
-          const result = await csvService.deleteCSV(req.params.filename);
-          res.json(result);
-        } catch (error) {
-          console.error("Error eliminando CSV:", error);
-          res.status(500).json({ error: error.message });
-        }
-      }
-    );
-
-    // Descargar plantilla CSV
-    this.app.get("/api/csv/template", (req, res) => {
-      try {
-        const templateContent = `Parque Industrial,Ubicación,Tipo,Ancho,Largo,Area (m2),Precio,Estado,Información Extra,Ventajas Estratégicas
-Vernes,Carr. México - Qro,Nave Industrial,50,30,1500,750000,Disponible,Incluye oficinas administrativas,Acceso directo a autopistas principales
-LuisOnorio,Av. Constituyentes,Micronave,25,20,500,350000,Pre-Venta,Cuenta con muelle de carga,Zona de alto flujo comercial`;
-
-        res.setHeader("Content-Type", "text/csv");
-        res.setHeader(
-          "Content-Disposition",
-          'attachment; filename="plantilla_naves.csv"'
-        );
-        res.send(templateContent);
-      } catch (error) {
-        console.error("Error descargando plantilla CSV:", error);
-        res.status(500).json({ error: "Error generando plantilla" });
-      }
-    });
-
-    // Buscar en CSVs (endpoint interno para la IA)
-    this.app.post("/api/csv/search", requireAuth, async (req, res) => {
-      try {
-        const { query } = req.body;
-        if (!query) {
-          return res.status(400).json({ error: "Query es requerido" });
-        }
-
-        const results = await csvService.searchInCSV(query);
-        res.json({ results });
-      } catch (error) {
-        console.error("Error buscando en CSV:", error);
-        res.status(500).json({ error: "Error en la búsqueda" });
-      }
-    });
 
     // Servir React app para todas las rutas no-API (solo en producción)
     if (process.env.NODE_ENV === "production") {
