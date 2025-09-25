@@ -7,9 +7,7 @@ const humanModeManager = require("../services/humanModeManager");
 const salesManager = require("../services/salesManager");
 const conversationAnalyzer = require("../services/conversationAnalyzer");
 const authService = require("../services/authService");
-const {
-  requireAuth
-} = require("../middleware/auth");
+const { requireAuth } = require("../middleware/auth");
 const ViteExpress = require("vite-express");
 
 class WebServer {
@@ -259,7 +257,7 @@ class WebServer {
                 <body>
                     <div class="container">
                         <div class="header">
-                            <h1>Gabylimp WhatsApp</h1>
+                            <h1>RRHH QR</h1>
                             <p class="subtitle">Escanea el código QR para conectar</p>
                         </div>
                         
@@ -832,7 +830,6 @@ class WebServer {
         res.status(500).json({ error: "Error interno del servidor" });
       }
     });
-
 
     // Servir React app para todas las rutas no-API (solo en producción)
     if (process.env.NODE_ENV === "production") {
