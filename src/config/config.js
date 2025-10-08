@@ -4,7 +4,7 @@ module.exports = {
     deepseekApiKey: process.env.DEEPSEEK_API_KEY,
     deepseekApiUrl: 'https://api.deepseek.com/v1/chat/completions',
     webPort: process.env.WEB_PORT || 3001,
-    sessionTimeout: 5 * 60 * 1000, // 5 minutos
+    sessionTimeout: 2 * 60 * 60 * 1000, // 2 horas
     checkInterval: 60000, // 1 minuto
     maxMessages: 10, // Máximo de mensajes en contexto
     
