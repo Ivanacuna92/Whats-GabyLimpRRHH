@@ -58,11 +58,7 @@ class WhatsAppBot {
                 connectTimeoutMs: 60000,
                 keepAliveIntervalMs: 30000,
                 qrTimeout: undefined,
-                markOnlineOnConnect: false,
-                msgRetryCounterCache: {},
-                retryRequestDelayMs: 250,
-                maxMsgRetryCount: 5,
-                auth: state
+                markOnlineOnConnect: false
             });
             
         
