@@ -81,8 +81,8 @@ class WhatsAppBot {
                 const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
                 console.log('Conexión cerrada debido a', lastDisconnect?.error, ', reconectando:', shouldReconnect);
                 
-                // Si es error 405 o 401, limpiar sesión y reiniciar con límite
-                if (statusCode === 405 || statusCode === 401 || statusCode === 403) {
+                // Si es error 405, 401, 403 o 515, limpiar sesión y reiniciar con límite
+                if (statusCode === 405 || statusCode === 401 || statusCode === 403 || statusCode === 515) {
                     this.reconnectAttempts++;
                     
                     if (this.reconnectAttempts > this.maxReconnectAttempts) {
@@ -93,9 +93,11 @@ class WhatsAppBot {
                     
                     console.log(`Error ${statusCode} detectado. Intento ${this.reconnectAttempts}/${this.maxReconnectAttempts}. Limpiando sesión...`);
                     this.clearSession();
-                    
+
                     this.isReconnecting = false;
-                    setTimeout(() => this.start(), 5000);
+                    // Delay mayor para error 515 (stream error)
+                    const delay = statusCode === 515 ? 10000 : 5000;
+                    setTimeout(() => this.start(), delay);
                 } else if (shouldReconnect && statusCode !== DisconnectReason.loggedOut) {
                     this.reconnectAttempts = 0;
                     this.isReconnecting = false;
