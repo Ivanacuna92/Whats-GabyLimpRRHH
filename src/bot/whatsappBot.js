@@ -48,7 +48,7 @@ class WhatsAppBot {
                 },
                 printQRInTerminal: false,
                 logger: pino({ level: 'silent' }),
-                browser: ['Chrome (Linux)', '', ''],
+                browser: ['Ubuntu', 'Chrome', '131.0.0'],
                 generateHighQualityLinkPreview: false,
                 syncFullHistory: false,
                 getMessage: async () => {
@@ -81,23 +81,32 @@ class WhatsAppBot {
                 const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
                 console.log('Conexión cerrada debido a', lastDisconnect?.error, ', reconectando:', shouldReconnect);
                 
-                // Si es error 405, 401, 403 o 515, limpiar sesión y reiniciar con límite
-                if (statusCode === 405 || statusCode === 401 || statusCode === 403 || statusCode === 515) {
+                // Si es error 405, 401, 403, limpiar sesión y reiniciar
+                if (statusCode === 405 || statusCode === 401 || statusCode === 403) {
                     this.reconnectAttempts++;
-                    
+
                     if (this.reconnectAttempts > this.maxReconnectAttempts) {
                         console.log('❌ Máximo de intentos de reconexión alcanzado. Por favor usa el botón de reiniciar sesión en /qr');
                         this.isReconnecting = false;
                         return;
                     }
-                    
+
                     console.log(`Error ${statusCode} detectado. Intento ${this.reconnectAttempts}/${this.maxReconnectAttempts}. Limpiando sesión...`);
                     this.clearSession();
 
                     this.isReconnecting = false;
-                    // Delay mayor para error 515 (stream error)
-                    const delay = statusCode === 515 ? 10000 : 5000;
-                    setTimeout(() => this.start(), delay);
+                    setTimeout(() => this.start(), 5000);
+                } else if (statusCode === 515) {
+                    // Error 515: NO limpiar sesión, solo esperar y reconectar
+                    this.reconnectAttempts++;
+                    if (this.reconnectAttempts > 5) {
+                        console.log('❌ Demasiados errores 515. Limpiando sesión...');
+                        this.clearSession();
+                        this.reconnectAttempts = 0;
+                    }
+                    console.log(`Error 515 (Stream Error). Reintentando en 15 segundos... (${this.reconnectAttempts}/5)`);
+                    this.isReconnecting = false;
+                    setTimeout(() => this.start(), 15000);
                 } else if (shouldReconnect && statusCode !== DisconnectReason.loggedOut) {
                     this.reconnectAttempts = 0;
                     this.isReconnecting = false;
@@ -144,23 +153,49 @@ class WhatsAppBot {
                 // Obtener el número del remitente
                 const from = msg.key.remoteJid;
                 const isGroup = from.endsWith('@g.us');
-                
+                const isLead = from.endsWith('@lid');
+
+                // DEBUG: Log completo del mensaje para leads
+                if (isLead) {
+                    console.log('═══════════════════════════════════════════');
+                    console.log('🔍 DEBUG LEAD - Estructura completa del mensaje:');
+                    console.log('msg.key:', JSON.stringify(msg.key, null, 2));
+                    console.log('msg.senderPn:', msg.senderPn);
+                    console.log('msg.participant:', msg.participant);
+                    console.log('msg.pushName:', msg.pushName);
+                    console.log('msg.verifiedBizName:', msg.verifiedBizName);
+                    console.log('Propiedades de msg:', Object.keys(msg));
+                    console.log('msg completo:', JSON.stringify(msg, null, 2));
+                    console.log('═══════════════════════════════════════════');
+                }
+
                 // Solo responder a mensajes privados
                 if (isGroup) return;
-                
+
                 // Obtener el texto del mensaje
-                const conversation = msg.message.conversation || 
-                                   msg.message.extendedTextMessage?.text || 
+                const conversation = msg.message.conversation ||
+                                   msg.message.extendedTextMessage?.text ||
                                    '';
-                
+
                 // Ignorar mensajes sin texto
                 if (!conversation || conversation.trim() === '') {
                     console.log('Mensaje ignorado - Sin contenido de texto');
                     return;
                 }
-                
+
                 // Extraer información del usuario
-                const userId = from.replace('@s.whatsapp.net', '');
+                // Para leads (@lid), obtener número real desde msg.key.senderPn
+                let userId;
+                if (isLead && msg.key.senderPn) {
+                    userId = msg.key.senderPn.replace('@s.whatsapp.net', '');
+                    console.log(`📱 Lead detectado - LID: ${from}, Número real: ${userId}`);
+                } else if (isLead) {
+                    // Si es lead pero no tiene senderPn, usar el LID como identificador
+                    userId = from.replace('@lid', '');
+                    console.log(`⚠️ Lead sin senderPn - usando LID: ${userId}`);
+                } else {
+                    userId = from.replace('@s.whatsapp.net', '');
+                }
                 const userName = msg.pushName || userId;
                 
                 await logger.log('cliente', conversation, userId, userName);
@@ -227,9 +262,17 @@ class WhatsAppBot {
     
     async handleError(error, message) {
         console.error('Error procesando mensaje:', error);
-        
+
         const from = message.key.remoteJid;
-        const userId = from.replace('@s.whatsapp.net', '');
+        const isLead = from.endsWith('@lid');
+        let userId;
+        if (isLead && message.key.senderPn) {
+            userId = message.key.senderPn.replace('@s.whatsapp.net', '');
+        } else if (isLead) {
+            userId = from.replace('@lid', '');
+        } else {
+            userId = from.replace('@s.whatsapp.net', '');
+        }
         
         let errorMessage = 'Lo siento, ocurrió un error. Inténtalo de nuevo.';
         
